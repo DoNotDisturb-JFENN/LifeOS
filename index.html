@@ -71,7 +71,7 @@
     <section class="dashboard-toolbar" aria-label="Search and task filters">
         <label class="search-field" for="global-search">
             <span>Search LifeOS</span>
-            <input id="global-search" type="search" placeholder="Search tasks, reminders, habits, goals, and notes">
+            <input id="global-search" type="search" placeholder="Search tasks, events, reminders, habits, goals, and notes">
         </label>
         <label for="priority-filter">
             <span>Priority</span>
@@ -134,6 +134,50 @@
             <h3>Reminders</h3>
             <div id="reminders-container"></div>
             <p class="reminder-help">Set a reminder on a task to see it here. LifeOS must be open for reminders to go off.</p>
+        </section>
+        <section id="calendar-div" class="main-div">
+            <div class="calendar-heading">
+                <h3>Calendar</h3>
+                <div class="calendar-navigation" aria-label="Calendar navigation">
+                    <button id="calendar-previous" type="button" aria-label="Previous month">‹</button>
+                    <strong id="calendar-month"></strong>
+                    <button id="calendar-next" type="button" aria-label="Next month">›</button>
+                    <button id="calendar-today" type="button">Today</button>
+                </div>
+            </div>
+            <div id="calendar-grid" role="grid" aria-label="Monthly calendar"></div>
+            <form id="event-form" class="event-form">
+                <h4 id="event-form-heading">Add an event</h4>
+                <input id="event-id" type="hidden">
+                <label for="event-title">Event title
+                    <input id="event-title" type="text" maxlength="150" placeholder="Assignment, test, project..." required>
+                </label>
+                <label for="event-type">Type
+                    <select id="event-type">
+                        <option value="Assignment">Assignment</option>
+                        <option value="Test">Test</option>
+                        <option value="Project">Project</option>
+                        <option value="Event">Event</option>
+                    </select>
+                </label>
+                <label for="event-date">Date
+                    <input id="event-date" type="date" required>
+                </label>
+                <label for="event-time">Time (optional)
+                    <input id="event-time" type="time">
+                </label>
+                <label class="event-description" for="event-description">Details (optional)
+                    <textarea id="event-description" maxlength="1000" rows="2" placeholder="Add any useful details"></textarea>
+                </label>
+                <div class="event-form-actions">
+                    <button id="event-save" type="submit">Add event</button>
+                    <button id="event-cancel" type="button" hidden>Cancel edit</button>
+                </div>
+            </form>
+        </section>
+        <section id="upcoming-events-div" class="main-div">
+            <h3>Upcoming events</h3>
+            <div id="upcoming-events-container"></div>
         </section>
         <section id="habits-div" class="main-div">
             <h3>Habits</h3>
