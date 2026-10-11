@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>LifeOS</title>
+</head>
+<body>
+    <section id="auth-panel" class="main-div" aria-labelledby="auth-heading">
+        <h2 id="auth-heading">Connect to LifeOS</h2>
+        <p id="auth-message">Enter the server passcode to continue.</p>
+        <form id="server-access-form">
+            <label for="server-access-token">Server passcode</label>
+            <input id="server-access-token" type="password" autocomplete="current-password" required>
+            <button type="submit">Continue</button>
+        </form>
+        <div id="account-panel" hidden>
+            <h2 id="account-heading">Log in</h2>
+            <form id="account-form">
+                <label for="account-username">Username</label>
+                <input id="account-username" name="username" type="text" minlength="3" maxlength="32" pattern="[A-Za-z0-9_]{3,32}" autocomplete="username" required>
+                <label for="account-password">Password</label>
+                <input id="account-password" name="password" type="password" minlength="10" maxlength="256" autocomplete="current-password" required>
+                <button id="account-submit" type="submit">Log in</button>
+            </form>
+            <button id="account-mode-toggle" class="text-button" type="button">Create an account</button>
+            <p class="auth-warning">Only use this login on a trusted network. This local server uses HTTP.</p>
+        </div>
+    </section>
+    <main id="app-content" hidden>
+    <header class="page-header">
+        <div class="page-title">
+            <h1>LifeOS</h1>
+        </div>
+        <div class="header-side">
+            <details class="header-menu" aria-label="Account and app settings">
+                <summary>Menu <span class="menu-chevron" aria-hidden="true"></span></summary>
+                <div class="header-menu-panel">
+                    <div class="menu-account">
+                        <span>Signed in as</span>
+                        <strong id="account-name"></strong>
+                    </div>
+                    <div class="menu-actions">
+                        <button id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+                        <button id="customize-dashboard" type="button">Customize dashboard</button>
+                        <button id="open-settings" type="button">Settings</button>
+                        <button id="logout-button" type="button">Log out</button>
+                    </div>
+                    <hr>
+                    <div class="menu-actions">
+                        <button id="export-backup" type="button">Download backup</button>
+                        <button id="import-backup-trigger" type="button">Import backup</button>
+                        <input id="import-backup-input" type="file" accept=".json,application/json" hidden>
+                    </div>
+                </div>
+            </details>
+            <section class="datetime-card" aria-label="Current date and time">
+                <div class="date-display">
+                    <span class="datetime-label">TODAY</span>
+                    <time id="date-display"></time>
+                </div>
+                <div class="clock-display">
+                    <span class="datetime-label">LOCAL TIME</span>
+                    <time id="clock-display"></time>
+                </div>
+            </section>
+            <p id="backup-status" role="status" aria-live="polite"></p>
+        </div>
+    </header>
+    <section class="dashboard-toolbar" aria-label="Search and task filters">
+        <label class="search-field" for="global-search">
+            <span>Search LifeOS</span>
+            <input id="global-search" type="search" placeholder="Search tasks, reminders, habits, goals, and notes">
+        </label>
+        <label for="priority-filter">
+            <span>Priority</span>
+            <select id="priority-filter">
+                <option value="">All priorities</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
+        </label>
+        <label for="project-filter">
+            <span>Project</span>
+            <select id="project-filter">
+                <option value="">All projects</option>
+            </select>
+        </label>
+        <label for="category-filter">
+            <span>Category</span>
+            <select id="category-filter">
+                <option value="">All categories</option>
+            </select>
+        </label>
+        <p id="search-status" role="status" aria-live="polite"></p>
+    </section>
+    <div id="dashboard-grid">
+        <section id="tasks-div" class="main-div">
+            <h3>Tasks</h3>
+            <div id="tasks-container"></div>
+            <button id="add-task-trigger" type="button">Add Task</button>
+            <div id="add-task-container">
+                <input type="text" id="add-task-input" maxlength="500" placeholder="Add a Task">
+                <div class="task-fields">
+                    <label for="add-task-priority">Priority
+                        <select id="add-task-priority">
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </label>
+                    <label for="add-task-project">Project
+                        <input id="add-task-project" type="text" maxlength="60" placeholder="Optional">
+                    </label>
+                    <label for="add-task-category">Category
+                        <input id="add-task-category" type="text" maxlength="40" placeholder="Optional">
+                    </label>
+                </div>
+                <div class="task-reminder-fields">
+                    <label class="reminder-enable" for="add-task-reminder-enabled">
+                        <input id="add-task-reminder-enabled" type="checkbox">
+                        Set a reminder
+                    </label>
+                    <label for="add-task-reminder-at">Remind me at
+                        <input id="add-task-reminder-at" type="datetime-local" disabled>
+                    </label>
+                </div>
+                <button id="add-task" type="button">Add</button>
+            </div>
+        </section>
+        <section id="reminders-div" class="main-div">
+            <h3>Reminders</h3>
+            <div id="reminders-container"></div>
+            <p class="reminder-help">Set a reminder on a task to see it here. LifeOS must be open for reminders to go off.</p>
+        </section>
+        <section id="habits-div" class="main-div">
+            <h3>Habits</h3>
+            <div id="habits-container">
+                <form id="habits-form"></form>
+            </div>
+            <button id="add-habit-trigger" type="button">Add Habit</button>
+            <div id="add-habit-container">
+                <input type="text" id="add-habit-input" placeholder="Add a Habit">
+                <button id="add-habit" type="button">Add</button>
+            </div>
+        </section>
+        <section id="goals-div" class="main-div">
+            <h3>Goals</h3>
+            <div id="goals-container"></div>
+            <button id="add-goal-trigger" type="button">Add Goal</button>
+            <div id="add-goal-container">
+                <input type="text" id="add-goal-input" placeholder="Name your goal">
+                <button id="add-goal" type="button">Add</button>
+            </div>
+        </section>
+        <section id="notes-div" class="main-div">
+            <h3>Notes</h3>
+            <textarea id="notes-input" aria-label="Notes" placeholder="Write freely... Your notes save automatically." spellcheck="true"></textarea>
+        </section>
+        <section id="statistics-section" aria-label="Statistics">
+            <button id="statistics-toggle" type="button" aria-expanded="false" aria-controls="statistics-panel">Show statistics</button>
+            <div id="statistics-panel" hidden>
+                <h3>At a glance</h3>
+                <dl>
+                    <div><dt>Tasks</dt><dd id="statistics-tasks">0</dd></div>
+                    <div><dt>Goals</dt><dd id="statistics-goals">0</dd></div>
+                    <div><dt>Habits</dt><dd id="statistics-habits">0</dd></div>
+                    <div><dt>Note characters</dt><dd id="statistics-notes">0</dd></div>
+                </dl>
+            </div>
+        </section>
+    </div>
+    <div id="reminder-alerts" aria-live="assertive" aria-atomic="false"></div>
+    <dialog id="dashboard-dialog" aria-labelledby="dashboard-dialog-title">
+        <form method="dialog" class="dashboard-dialog-content">
+            <div class="dashboard-dialog-heading">
+                <div>
+                    <h2 id="dashboard-dialog-title">Customize dashboard</h2>
+                    <p>Choose which sections appear and arrange their order.</p>
+                </div>
+                <button class="dialog-close" type="submit" aria-label="Close">×</button>
+            </div>
+            <div id="dashboard-settings-list"></div>
+            <button class="dialog-done" type="submit">Done</button>
+        </form>
+    </dialog>
+    <dialog id="settings-dialog" aria-labelledby="settings-dialog-title">
+        <div class="settings-dialog-content">
+            <div class="dashboard-dialog-heading">
+                <div>
+                    <h2 id="settings-dialog-title">Settings</h2>
+                    <p>Manage your account and appearance.</p>
+                </div>
+                <button id="settings-close" class="dialog-close" type="button" aria-label="Close settings">×</button>
+            </div>
+            <p id="settings-status" role="status" aria-live="polite"></p>
+            <section class="settings-section">
+                <h3>Appearance</h3>
+                <label for="settings-theme">Theme</label>
+                <select id="settings-theme">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
+            </section>
+            <section id="account-settings" class="settings-section account-setting">
+                <h3>Username</h3>
+                <form id="username-form">
+                    <label for="settings-username">New username</label>
+                    <input id="settings-username" type="text" minlength="3" maxlength="32" pattern="[A-Za-z0-9_]{3,32}" autocomplete="username" required>
+                    <label for="username-current-password">Current password</label>
+                    <input id="username-current-password" type="password" minlength="10" maxlength="256" autocomplete="current-password" required>
+                    <button type="submit">Save username</button>
+                </form>
+            </section>
+            <section class="settings-section account-setting">
+                <h3>Password</h3>
+                <form id="password-form">
+                    <label for="password-current-password">Current password</label>
+                    <input id="password-current-password" type="password" minlength="10" maxlength="256" autocomplete="current-password" required>
+                    <label for="settings-new-password">New password</label>
+                    <input id="settings-new-password" type="password" minlength="10" maxlength="256" autocomplete="new-password" required>
+                    <label for="settings-confirm-password">Confirm new password</label>
+                    <input id="settings-confirm-password" type="password" minlength="10" maxlength="256" autocomplete="new-password" required>
+                    <button type="submit">Change password</button>
+                </form>
+            </section>
+            <section class="settings-section danger-zone account-setting">
+                <h3>Delete account</h3>
+                <p>This permanently deletes your account and all of its saved LifeOS data. Download a backup first if you want to keep it.</p>
+                <form id="delete-account-form">
+                    <label for="delete-account-username">Type <strong id="delete-account-name"></strong> to confirm</label>
+                    <input id="delete-account-username" type="text" autocomplete="off" required>
+                    <label for="delete-account-password">Current password</label>
+                    <input id="delete-account-password" type="password" minlength="10" maxlength="256" autocomplete="current-password" required>
+                    <button class="danger-button" type="submit">Delete my account</button>
+                </form>
+            </section>
+            <p id="local-account-settings" hidden>Account changes are unavailable in local browser mode.</p>
+        </div>
+    </dialog>
+    </main>
+    <script src="script.js"></script>
+</body>
+</html>

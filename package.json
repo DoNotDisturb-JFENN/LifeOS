@@ -1,0 +1,9 @@
+{
+  "name": "lifeos-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local-network LifeOS app and data server",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
