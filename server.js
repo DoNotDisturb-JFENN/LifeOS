@@ -34,13 +34,14 @@ function getDataDirectory() {
 function defaultData() {
     return {
         tasks: [],
+        events: [],
         habits: [],
         completedHabits: [],
         goals: [],
         notes: "",
         dashboard: {
-            order: ["tasks", "reminders", "habits", "goals", "notes", "statistics"],
-            visible: ["tasks", "reminders", "habits", "goals", "notes", "statistics"]
+            order: ["tasks", "reminders", "habits", "goals", "notes", "calendar", "upcomingEvents", "statistics"],
+            visible: ["tasks", "reminders", "habits", "goals", "notes", "calendar", "upcomingEvents", "statistics"]
         }
     };
 }
@@ -77,16 +78,38 @@ function isValidTask(task) {
             (!task.reminderNotifiedAt || task.reminderAt));
 }
 
+function isValidEvent(event) {
+    return event &&
+        typeof event === "object" &&
+        typeof event.id === "string" &&
+        event.id.length > 0 &&
+        event.id.length <= 100 &&
+        typeof event.title === "string" &&
+        event.title.trim().length > 0 &&
+        event.title.length <= 150 &&
+        ["Assignment", "Test", "Project", "Event"].includes(event.type) &&
+        typeof event.date === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(event.date) &&
+        Number.isFinite(Date.parse(`${event.date}T00:00:00Z`)) &&
+        new Date(`${event.date}T00:00:00Z`).toISOString().slice(0, 10) === event.date &&
+        typeof event.time === "string" &&
+        (event.time === "" || /^([01]\d|2[0-3]):[0-5]\d$/.test(event.time)) &&
+        typeof event.description === "string" &&
+        event.description.length <= 1000;
+}
+
 function isValidDashboard(value) {
     const legacySections = ["tasks", "habits", "goals", "notes", "statistics"];
     const sections = [...legacySections, "reminders"];
-    const isValidOrder = order =>
-        (order.length === legacySections.length &&
-            new Set(order).size === legacySections.length &&
-            order.every(section => legacySections.includes(section))) ||
-        (order.length === sections.length &&
-            new Set(order).size === sections.length &&
-            order.every(section => sections.includes(section)));
+    const currentSections = [...sections, "calendar", "upcomingEvents"];
+    const isValidOrder = order => {
+        const validSets = [legacySections, sections, currentSections];
+        return validSets.some(keys =>
+            order.length === keys.length &&
+            new Set(order).size === keys.length &&
+            order.every(section => keys.includes(section))
+        );
+    };
     return value &&
         Array.isArray(value.order) &&
         isValidOrder(value.order) &&
@@ -100,6 +123,8 @@ function isValidData(value) {
     return value &&
         Array.isArray(value.tasks) &&
         value.tasks.every(isValidTask) &&
+        (value.events === undefined ||
+            (Array.isArray(value.events) && value.events.every(isValidEvent))) &&
         isStringArray(value.habits) &&
         isStringArray(value.completedHabits) &&
         value.completedHabits.every(habit => value.habits.includes(habit)) &&
@@ -289,6 +314,7 @@ function serveStatic(request, response, pathname) {
 
 function isEmpty(data) {
     return data.tasks.length === 0 &&
+        (!data.events || data.events.length === 0) &&
         data.habits.length === 0 &&
         data.completedHabits.length === 0 &&
         data.goals.length === 0 &&
@@ -589,7 +615,7 @@ const server = http.createServer(async (request, response) => {
                     !patch ||
                     typeof patch !== "object" ||
                     Array.isArray(patch) ||
-                    Object.keys(patch).some(key => !["tasks", "habits", "completedHabits", "goals", "notes", "dashboard"].includes(key)) ||
+                    Object.keys(patch).some(key => !["tasks", "events", "habits", "completedHabits", "goals", "notes", "dashboard"].includes(key)) ||
                     !isValidData(updated)
                 ) {
                     sendJson(response, 400, { error: "Invalid LifeOS data update." });
