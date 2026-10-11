@@ -27,6 +27,8 @@ const dashboardSections = [
     { key: "habits", id: "habits-div", label: "Habits" },
     { key: "goals", id: "goals-div", label: "Goals" },
     { key: "notes", id: "notes-div", label: "Notes" },
+    { key: "calendar", id: "calendar-div", label: "Calendar" },
+    { key: "upcomingEvents", id: "upcoming-events-div", label: "Upcoming events" },
     { key: "statistics", id: "statistics-section", label: "Statistics" }
 ];
 const defaultDashboard = {
@@ -45,11 +47,13 @@ const clockFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 let tasks = [];
+let events = [];
 let habits = [];
 let completedHabits = [];
 let goals = [];
 let dashboard = defaultDashboard;
 let activeUser = null;
+let displayedCalendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 const localFileMode = location.protocol === "file:";
 let accessToken = localStorage.getItem("lifeosAccessToken");
 let pendingWrites = Promise.resolve();
@@ -529,6 +533,228 @@ function checkReminders() {
     renderReminders();
 }
 
+function localDateString(date = new Date()) {
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0")
+    ].join("-");
+}
+
+function dateFromLocalString(value) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day, 12);
+}
+
+function formatEventDate(value, options = {}) {
+    return new Intl.DateTimeFormat(undefined, {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        ...options
+    }).format(dateFromLocalString(value));
+}
+
+function formatEventTime(value) {
+    if (!value) return "All day";
+    const [hour, minute] = value.split(":").map(Number);
+    const date = new Date();
+    date.setHours(hour, minute, 0, 0);
+    return new Intl.DateTimeFormat(undefined, {
+        hour: "numeric",
+        minute: "2-digit"
+    }).format(date);
+}
+
+function editEvent(event) {
+    $("event-id").value = event.id;
+    $("event-title").value = event.title;
+    $("event-type").value = event.type;
+    $("event-date").value = event.date;
+    $("event-time").value = event.time;
+    $("event-description").value = event.description;
+    $("event-form-heading").textContent = "Edit event";
+    $("event-save").textContent = "Save changes";
+    $("event-cancel").hidden = false;
+    displayedCalendarMonth = dateFromLocalString(event.date);
+    renderCalendar();
+    $("event-title").focus();
+}
+
+function resetEventForm() {
+    $("event-form").reset();
+    $("event-id").value = "";
+    $("event-date").value = localDateString();
+    $("event-form-heading").textContent = "Add an event";
+    $("event-save").textContent = "Add event";
+    $("event-cancel").hidden = true;
+}
+
+function removeEvent(event) {
+    if (!confirm(`Delete "${event.title}" from your calendar?`)) return;
+    events = events.filter(item => item.id !== event.id);
+    saveData({ events });
+    renderCalendar();
+    renderUpcomingEvents();
+    applySearch();
+    backupStatus.textContent = "Event deleted.";
+}
+
+function renderCalendar() {
+    const grid = $("calendar-grid");
+    grid.replaceChildren();
+    $("calendar-month").textContent = new Intl.DateTimeFormat(undefined, {
+        month: "long",
+        year: "numeric"
+    }).format(displayedCalendarMonth);
+
+    for (const label of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) {
+        const weekday = document.createElement("div");
+        weekday.className = "calendar-weekday";
+        weekday.setAttribute("role", "columnheader");
+        weekday.textContent = label;
+        grid.appendChild(weekday);
+    }
+
+    const firstDay = new Date(
+        displayedCalendarMonth.getFullYear(),
+        displayedCalendarMonth.getMonth(),
+        1
+    );
+    const start = new Date(
+        firstDay.getFullYear(),
+        firstDay.getMonth(),
+        1 - firstDay.getDay()
+    );
+    const today = localDateString();
+
+    for (let index = 0; index < 42; index++) {
+        const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
+        const dateString = localDateString(date);
+        const cell = document.createElement("div");
+        cell.className = "calendar-day";
+        cell.setAttribute("role", "gridcell");
+        cell.classList.toggle("is-other-month", date.getMonth() !== displayedCalendarMonth.getMonth());
+        cell.classList.toggle("is-today", dateString === today);
+        cell.setAttribute("aria-label", formatEventDate(dateString));
+
+        const dayButton = document.createElement("button");
+        dayButton.type = "button";
+        dayButton.className = "calendar-day-number";
+        dayButton.textContent = String(date.getDate());
+        dayButton.setAttribute("aria-label", `Add an event on ${formatEventDate(dateString)}`);
+        dayButton.addEventListener("click", () => {
+            $("event-date").value = dateString;
+            if (date.getMonth() !== displayedCalendarMonth.getMonth()) {
+                displayedCalendarMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+                renderCalendar();
+            }
+            $("event-title").focus();
+        });
+        cell.appendChild(dayButton);
+
+        const dayEvents = events
+            .filter(event => event.date === dateString)
+            .sort((left, right) =>
+                (left.time || "").localeCompare(right.time || "") || left.title.localeCompare(right.title)
+            );
+        for (const event of dayEvents.slice(0, 3)) {
+            const eventButton = document.createElement("button");
+            eventButton.type = "button";
+            eventButton.className = `calendar-event event-${event.type.toLowerCase()}`;
+            eventButton.textContent = event.title;
+            eventButton.title = `${event.type}: ${event.title}${event.time ? ` at ${formatEventTime(event.time)}` : ""}`;
+            eventButton.hidden = !matchesSearch(`${event.title} ${event.type} ${event.description}`);
+            eventButton.addEventListener("click", () => editEvent(event));
+            cell.appendChild(eventButton);
+        }
+        if (dayEvents.length > 3) {
+            const more = document.createElement("span");
+            more.className = "calendar-more";
+            more.textContent = `+${dayEvents.length - 3} more`;
+            cell.appendChild(more);
+        }
+        grid.appendChild(cell);
+    }
+}
+
+function renderUpcomingEvents() {
+    const container = $("upcoming-events-container");
+    container.replaceChildren();
+    const today = localDateString();
+    const upcoming = events
+        .filter(event => event.date >= today)
+        .sort((left, right) =>
+            left.date.localeCompare(right.date) ||
+            (left.time || "").localeCompare(right.time || "") ||
+            left.title.localeCompare(right.title)
+        );
+    if (upcoming.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "calendar-empty";
+        empty.textContent = "Nothing scheduled yet. Add an event in the calendar to see it here.";
+        container.appendChild(empty);
+        return;
+    }
+    for (const event of upcoming) {
+        const item = document.createElement("article");
+        item.className = `upcoming-event event-${event.type.toLowerCase()}`;
+        item.hidden = !matchesSearch(`${event.title} ${event.type} ${event.description}`);
+
+        const date = document.createElement("time");
+        date.dateTime = event.date + (event.time ? `T${event.time}` : "");
+        date.textContent = `${formatEventDate(event.date)} · ${formatEventTime(event.time)}`;
+        const content = document.createElement("div");
+        content.className = "upcoming-event-content";
+        const title = document.createElement("strong");
+        title.textContent = event.title;
+        const type = document.createElement("span");
+        type.className = "event-type";
+        type.textContent = event.type;
+        content.append(title, type);
+        if (event.description) {
+            const description = document.createElement("p");
+            description.textContent = event.description;
+            content.appendChild(description);
+        }
+        const actions = document.createElement("div");
+        actions.className = "upcoming-event-actions";
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.textContent = "Edit";
+        edit.addEventListener("click", () => editEvent(event));
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "remove-item";
+        remove.textContent = "Delete";
+        remove.setAttribute("aria-label", `Delete event: ${event.title}`);
+        remove.addEventListener("click", () => removeEvent(event));
+        actions.append(edit, remove);
+        item.append(date, content, actions);
+        container.appendChild(item);
+    }
+}
+
+function isValidEvent(event) {
+    return event &&
+        typeof event === "object" &&
+        typeof event.id === "string" &&
+        event.id.length > 0 &&
+        event.id.length <= 100 &&
+        typeof event.title === "string" &&
+        event.title.trim().length > 0 &&
+        event.title.length <= 150 &&
+        ["Assignment", "Test", "Project", "Event"].includes(event.type) &&
+        typeof event.date === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(event.date) &&
+        localDateString(dateFromLocalString(event.date)) === event.date &&
+        typeof event.time === "string" &&
+        (event.time === "" || /^([01]\d|2[0-3]):[0-5]\d$/.test(event.time)) &&
+        typeof event.description === "string" &&
+        event.description.length <= 1000;
+}
+
 function renderGoal(goal) {
     const item = document.createElement("div");
     item.className = "goal-item";
@@ -712,20 +938,32 @@ function normalizeDashboard(value) {
     const order = [...new Set(value.order.filter(key => keys.includes(key)))];
     const visible = [...new Set(value.visible.filter(key => keys.includes(key)))];
     const isLegacyDashboard = !value.order.includes("reminders");
+    const newSections = ["reminders", "calendar", "upcomingEvents"];
     if (isLegacyDashboard) {
         order.splice(Math.max(1, order.indexOf("tasks") + 1), 0, "reminders");
+    }
+    const missingSections = newSections.slice(1).filter(key => !order.includes(key));
+    if (missingSections.length) {
+        const insertAt = order.includes("notes") ? order.indexOf("notes") + 1 : order.length;
+        order.splice(insertAt, 0, ...missingSections);
     }
     for (const key of keys) {
         if (!order.includes(key)) order.push(key);
     }
-    if (isLegacyDashboard && !visible.includes("reminders")) visible.push("reminders");
+    if (isLegacyDashboard) {
+        visible.push(...newSections.filter(key => !visible.includes(key)));
+    } else {
+        visible.push(...newSections.filter(key =>
+            !value.order.includes(key) && !visible.includes(key)
+        ));
+    }
     if (visible.length === 0) visible.push(keys[0]);
     return { order, visible };
 }
 
 function dashboardNeedsMigration(value) {
     return !isDashboardRecord(value) ||
-        !value.order.includes("reminders");
+        dashboardSections.some(section => !value.order.includes(section.key));
 }
 
 function applyDashboardSettings() {
@@ -776,6 +1014,8 @@ function applySearch(renderTaskList = true) {
         ? renderTasks()
         : tasks.filter(task => taskMatchesFilters(task)).length;
     renderReminders();
+    renderCalendar();
+    renderUpcomingEvents();
     if (!renderTaskList) {
         for (const element of tasksContainer.children) {
             const task = tasks[Number(element.dataset.taskIndex)];
@@ -785,7 +1025,14 @@ function applySearch(renderTaskList = true) {
     let resultCount = taskCount;
     const query = globalSearch.value.trim();
     const matchingReminders = tasks.filter(task => task.reminderAt && matchesSearch(task.text)).length;
-    resultCount += matchingReminders;
+    const matchingEvents = events.filter(event =>
+        matchesSearch(`${event.title} ${event.type} ${event.description}`)
+    ).length;
+    const upcomingEvents = events.filter(event =>
+        event.date >= localDateString() &&
+        matchesSearch(`${event.title} ${event.type} ${event.description}`)
+    ).length;
+    resultCount += matchingReminders + matchingEvents;
 
     for (const [key, container, collection, getText] of [
         ["habits", habitsForm, habits, habit => habit],
@@ -811,6 +1058,8 @@ function applySearch(renderTaskList = true) {
     for (const [key, hasResults] of [
         ["tasks", taskCount > 0],
         ["reminders", matchingReminders > 0],
+        ["calendar", matchingEvents > 0],
+        ["upcomingEvents", upcomingEvents > 0],
         ["habits", habits.some(matchesSearch)],
         ["goals", goals.some(goal => matchesSearch(goal.name))],
         ["notes", !hasQuery || !notesInput.value.trim() || notesMatch ||
@@ -845,10 +1094,11 @@ function setupComposer(trigger, container, input, add) {
 function getBackupData() {
     return {
         app: "LifeOS",
-        version: 3,
+        version: 4,
         exportedAt: new Date().toISOString(),
         data: {
             tasks,
+            events,
             habits,
             completedHabits,
             goals,
@@ -911,7 +1161,7 @@ async function importBackup(file) {
         const importedGoals = data.goals === undefined ? [] : data.goals;
         if (
             backup?.app !== "LifeOS" ||
-            ![1, 2, 3].includes(backup.version) ||
+            ![1, 2, 3, 4].includes(backup.version) ||
             !Array.isArray(importedTasks) ||
             !importedTasks.every(task =>
                 typeof task === "string" || isTaskRecord(task)
@@ -928,6 +1178,8 @@ async function importBackup(file) {
                 goal.progress <= 100
             ) ||
             (data.notes !== undefined && typeof data.notes !== "string") ||
+            (data.events !== undefined &&
+                (!Array.isArray(data.events) || !data.events.every(isValidEvent))) ||
             !completedHabits.every(habit => habits.includes(habit)) ||
             (data.dashboard !== undefined &&
                 (!isDashboardRecord(data.dashboard) ||
@@ -947,6 +1199,7 @@ async function importBackup(file) {
 
         const importedData = {
             tasks: importedTasks.map(normalizeTask),
+            events: data.events || [],
             habits,
             completedHabits,
             goals: importedGoals,
@@ -975,6 +1228,7 @@ async function importBackup(file) {
 function localBrowserData() {
     return {
         tasks: JSON.parse(localStorage.getItem("tasks") || "[]"),
+        events: JSON.parse(localStorage.getItem("events") || "[]"),
         habits: JSON.parse(localStorage.getItem("habits") || "[]"),
         completedHabits: JSON.parse(localStorage.getItem("completedHabits") || "[]"),
         goals: JSON.parse(localStorage.getItem("goals") || "[]"),
@@ -985,6 +1239,7 @@ function localBrowserData() {
 
 function hasSavedData(data) {
     return data.tasks.length > 0 ||
+        data.events.length > 0 ||
         data.habits.length > 0 ||
         data.goals.length > 0 ||
         data.notes.length > 0;
@@ -1028,6 +1283,7 @@ function showApp(data, user) {
     activeUser = user;
     const savedTasks = data.tasks;
     tasks = savedTasks.map(normalizeTask);
+    events = Array.isArray(data.events) ? data.events : [];
     habits = data.habits;
     completedHabits = data.completedHabits;
     goals = data.goals;
@@ -1038,12 +1294,12 @@ function showApp(data, user) {
     renderTasks();
     renderDashboardSettings();
     applyDashboardSettings();
-    if (savedTasks.some(task =>
+    if (!Array.isArray(data.events) || savedTasks.some(task =>
         typeof task === "string" ||
         !Object.hasOwn(task, "reminderAt") ||
         !Object.hasOwn(task, "reminderNotifiedAt")
     ) || dashboardNeedsMigration(data.dashboard)) {
-        saveData({ tasks, dashboard });
+        saveData({ tasks, events, dashboard });
     }
     $("account-name").textContent = user.username;
     $("logout-button").hidden = localFileMode;
@@ -1053,6 +1309,9 @@ function showApp(data, user) {
     setupComposer(addTaskTrigger, addTaskContainer, addTaskInput, addTask);
     setupComposer(addHabitTrigger, addHabitContainer, addHabitInput, addHabit);
     setupComposer(addGoalTrigger, addGoalContainer, addGoalInput, addGoal);
+    resetEventForm();
+    renderCalendar();
+    renderUpcomingEvents();
     const addReminderEnabled = $("add-task-reminder-enabled");
     const addReminderAt = $("add-task-reminder-at");
     addReminderEnabled.addEventListener("change", () => {
@@ -1076,6 +1335,53 @@ function showApp(data, user) {
         button.textContent = expanded ? "Show statistics" : "Hide statistics";
         $("statistics-panel").hidden = expanded;
     });
+    $("calendar-previous").addEventListener("click", () => {
+        displayedCalendarMonth = new Date(
+            displayedCalendarMonth.getFullYear(),
+            displayedCalendarMonth.getMonth() - 1,
+            1
+        );
+        renderCalendar();
+    });
+    $("calendar-next").addEventListener("click", () => {
+        displayedCalendarMonth = new Date(
+            displayedCalendarMonth.getFullYear(),
+            displayedCalendarMonth.getMonth() + 1,
+            1
+        );
+        renderCalendar();
+    });
+    $("calendar-today").addEventListener("click", () => {
+        const now = new Date();
+        displayedCalendarMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        $("event-date").value = localDateString(now);
+        renderCalendar();
+    });
+    $("event-form").addEventListener("submit", event => {
+        event.preventDefault();
+        const eventId = $("event-id").value;
+        const record = {
+            id: eventId || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            title: $("event-title").value.trim(),
+            type: $("event-type").value,
+            date: $("event-date").value,
+            time: $("event-time").value,
+            description: $("event-description").value.trim()
+        };
+        if (!isValidEvent(record)) {
+            backupStatus.textContent = "Enter a valid event title and date.";
+            return;
+        }
+        const existingIndex = events.findIndex(item => item.id === eventId);
+        if (existingIndex >= 0) events[existingIndex] = record;
+        else events.push(record);
+        displayedCalendarMonth = dateFromLocalString(record.date);
+        saveData({ events });
+        resetEventForm();
+        applySearch();
+        backupStatus.textContent = eventId ? "Event updated." : "Event added.";
+    });
+    $("event-cancel").addEventListener("click", resetEventForm);
     checkReminders();
     window.setInterval(checkReminders, 15000);
     $("export-backup").addEventListener("click", downloadBackup);
@@ -1234,7 +1540,7 @@ $("account-form").addEventListener("submit", async event => {
         if (mode === "signup" && result.isEmpty) {
             const browserData = localBrowserData();
             if (hasSavedData(browserData) &&
-                confirm("Copy this browser's saved tasks, habits, goals, and notes into your new account?")) {
+                confirm("Copy this browser's saved tasks, calendar events, habits, goals, and notes into your new account?")) {
                 try {
                     ({ data: result.data } = await apiRequest("/api/migrate", {
                         method: "POST",
